@@ -19,7 +19,6 @@ apple-itunes-music-analysis/
 ├── 09_product_content_analysis.sql  # Product performance analysis
 ├── 10_advanced_analytics.sql        # Advanced analytics with window functions
 ├── 11_executive_summary.sql         # Executive dashboard and KPIs
-├── data_import_guide.md             # Data import instructions
 └── README.md                        # This file
 ```
 
