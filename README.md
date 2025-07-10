@@ -144,7 +144,3 @@ The database consists of 11 interconnected tables:
 - How can we optimize our product mix?
 - What customer segments should we prioritize?
 - Where should we focus marketing efforts?
-
-## Performance Considerations
-
-- All tables include appropriate indexes for
