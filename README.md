@@ -56,7 +56,6 @@ The database consists of 11 interconnected tables:
    ```
 
 2. **Data Import**
-   - Follow instructions in `data_import_guide.md`
    - Import CSV files for each table
    - Ensure data integrity
 
