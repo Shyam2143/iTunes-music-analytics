@@ -1,5 +1,5 @@
 /*************************************************************************************************
--- Apple iTunes Music Analysis - Product & Content Analysis
+-- Apple iTunes Music Analysis - Product & Content Analysis (FIXED)
 --
 -- Author: Shyam
 -- Date: 2025-07-10
@@ -17,8 +17,8 @@ SELECT
     ar.name as artist_name,
     g.name as genre,
     COUNT(il.track_id) as times_purchased,
-    ROUND(SUM(il.unit_price * il.quantity), 2) as total_revenue,
-    ROUND(AVG(il.unit_price), 2) as avg_selling_price,
+    ROUND(SUM(il.unit_price * il.quantity)::numeric, 2) as total_revenue,
+    ROUND(AVG(il.unit_price)::numeric, 2) as avg_selling_price,
     t.unit_price as catalog_price
 FROM track t
 JOIN album al ON t.album_id = al.album_id
@@ -38,7 +38,7 @@ SELECT
     ar.name as artist_name,
     COUNT(il.track_id) as purchase_count,
     SUM(il.quantity) as total_quantity_sold,
-    ROUND(SUM(il.unit_price * il.quantity), 2) as total_revenue
+    ROUND(SUM(il.unit_price * il.quantity)::numeric, 2) as total_revenue
 FROM track t
 JOIN album al ON t.album_id = al.album_id
 JOIN artist ar ON al.artist_id = ar.artist_id
@@ -55,8 +55,8 @@ SELECT
     ar.name as artist_name,
     COUNT(DISTINCT t.track_id) as tracks_in_album,
     COUNT(il.track_id) as total_track_purchases,
-    ROUND(SUM(il.unit_price * il.quantity), 2) as album_revenue,
-    ROUND(AVG(il.unit_price), 2) as avg_track_price
+    ROUND(SUM(il.unit_price * il.quantity)::numeric, 2) as album_revenue,
+    ROUND(AVG(il.unit_price)::numeric, 2) as avg_track_price
 FROM album al
 JOIN artist ar ON al.artist_id = ar.artist_id
 JOIN track t ON al.album_id = t.album_id
@@ -92,9 +92,9 @@ SELECT 'Average Track Price by Genre' as analysis;
 SELECT 
     g.name as genre,
     COUNT(t.track_id) as total_tracks,
-    ROUND(AVG(t.unit_price), 2) as avg_catalog_price,
-    ROUND(MIN(t.unit_price), 2) as min_price,
-    ROUND(MAX(t.unit_price), 2) as max_price,
+    ROUND(AVG(t.unit_price)::numeric, 2) as avg_catalog_price,
+    ROUND(MIN(t.unit_price)::numeric, 2) as min_price,
+    ROUND(MAX(t.unit_price)::numeric, 2) as max_price,
     COUNT(CASE WHEN il.track_id IS NOT NULL THEN 1 END) as tracks_sold,
     ROUND(
         COUNT(CASE WHEN il.track_id IS NOT NULL THEN 1 END) * 100.0 / COUNT(t.track_id), 
@@ -113,13 +113,13 @@ SELECT
     g.name as genre,
     COUNT(DISTINCT t.track_id) as total_tracks,
     COUNT(il.invoice_line_id) as total_sales,
-    ROUND(SUM(il.unit_price * il.quantity), 2) as total_revenue,
+    ROUND(SUM(il.unit_price * il.quantity)::numeric, 2) as total_revenue,
     ROUND(
-        COUNT(il.invoice_line_id) / COUNT(DISTINCT t.track_id)::decimal, 
+        COUNT(il.invoice_line_id)::numeric / COUNT(DISTINCT t.track_id)::numeric, 
         2
     ) as sales_per_track,
     ROUND(
-        SUM(il.unit_price * il.quantity) / COUNT(DISTINCT t.track_id)::decimal, 
+        SUM(il.unit_price * il.quantity) / COUNT(DISTINCT t.track_id)::numeric, 
         2
     ) as revenue_per_track
 FROM genre g
@@ -135,8 +135,8 @@ SELECT
     p.name as playlist_name,
     COUNT(pt.track_id) as track_count,
     COUNT(DISTINCT g.genre_id) as genre_diversity,
-    ROUND(AVG(t.unit_price), 2) as avg_track_price,
-    ROUND(SUM(t.unit_price), 2) as total_playlist_value
+    ROUND(AVG(t.unit_price)::numeric, 2) as avg_track_price,
+    ROUND(SUM(t.unit_price)::numeric, 2) as total_playlist_value
 FROM playlist p
 JOIN playlist_track pt ON p.playlist_id = pt.playlist_id
 JOIN track t ON pt.track_id = t.track_id
@@ -150,10 +150,10 @@ SELECT 'Content Analysis by Media Type' as analysis;
 SELECT 
     mt.name as media_type,
     COUNT(t.track_id) as track_count,
-    ROUND(AVG(t.unit_price), 2) as avg_price,
-    ROUND(AVG(t.milliseconds/1000/60.0), 2) as avg_duration_minutes,
+    ROUND(AVG(t.unit_price)::numeric, 2) as avg_price,
+    ROUND(AVG(t.milliseconds/1000/60.0)::numeric, 2) as avg_duration_minutes,
     COUNT(il.track_id) as tracks_sold,
-    ROUND(SUM(il.unit_price * il.quantity), 2) as total_revenue
+    ROUND(SUM(il.unit_price * il.quantity)::numeric, 2) as total_revenue
 FROM media_type mt
 JOIN track t ON mt.media_type_id = t.media_type_id
 LEFT JOIN invoice_line il ON t.track_id = il.track_id
@@ -168,13 +168,13 @@ SELECT
     COUNT(DISTINCT al.album_id) as album_count,
     COUNT(DISTINCT t.track_id) as track_count,
     COUNT(il.track_id) as total_sales,
-    ROUND(SUM(il.unit_price * il.quantity), 2) as total_revenue,
+    ROUND(SUM(il.unit_price * il.quantity)::numeric, 2) as total_revenue,
     ROUND(
         SUM(il.unit_price * il.quantity) / NULLIF(COUNT(DISTINCT t.track_id), 0), 
         2
     ) as revenue_per_track,
     ROUND(
-        COUNT(il.track_id) / NULLIF(COUNT(DISTINCT t.track_id), 0)::decimal, 
+        COUNT(il.track_id)::numeric / NULLIF(COUNT(DISTINCT t.track_id), 0)::numeric, 
         2
     ) as avg_sales_per_track
 FROM artist ar

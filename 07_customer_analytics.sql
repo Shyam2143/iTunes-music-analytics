@@ -1,5 +1,5 @@
 /*************************************************************************************************
--- Apple iTunes Music Analysis - Customer Analytics
+-- Apple iTunes Music Analysis - Customer Analytics (FIXED)
 --
 -- Author: Shyam
 -- Date: 2025-07-10
@@ -17,8 +17,8 @@ SELECT
     c.country,
     c.city,
     COUNT(i.invoice_id) as total_purchases,
-    ROUND(SUM(i.total), 2) as lifetime_value,
-    ROUND(AVG(i.total), 2) as avg_order_value,
+    ROUND(SUM(i.total)::numeric, 2) as lifetime_value,
+    ROUND(AVG(i.total)::numeric, 2) as avg_order_value,
     MAX(i.invoice_date) as last_purchase_date
 FROM customer c
 JOIN invoice i ON c.customer_id = i.customer_id
@@ -36,15 +36,31 @@ WITH customer_clv AS (
     FROM customer c
     LEFT JOIN invoice i ON c.customer_id = i.customer_id
     GROUP BY c.customer_id
+),
+clv_stats AS (
+    SELECT 
+        AVG(clv) as avg_clv,
+        MIN(clv) as min_clv,
+        MAX(clv) as max_clv,
+        STDDEV(clv) as stddev_clv,
+        COUNT(*) as total_customers
+    FROM customer_clv
+),
+median_calc AS (
+    SELECT clv,
+           ROW_NUMBER() OVER (ORDER BY clv) as row_num,
+           COUNT(*) OVER() as total_count
+    FROM customer_clv
 )
 SELECT 
-    ROUND(AVG(clv), 2) as avg_customer_lifetime_value,
-    ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY clv), 2) as median_clv,
-    ROUND(STDDEV(clv), 2) as stddev_clv,
-    ROUND(MIN(clv), 2) as min_clv,
-    ROUND(MAX(clv), 2) as max_clv,
-    COUNT(*) as total_customers
-FROM customer_clv;
+    ROUND(s.avg_clv::numeric, 2) as avg_customer_lifetime_value,
+    ROUND(AVG(CASE WHEN m.row_num IN (m.total_count/2, (m.total_count+1)/2) THEN m.clv END)::numeric, 2) as median_clv,
+    ROUND(s.stddev_clv::numeric, 2) as stddev_clv,
+    ROUND(s.min_clv::numeric, 2) as min_clv,
+    ROUND(s.max_clv::numeric, 2) as max_clv,
+    s.total_customers
+FROM clv_stats s, median_calc m
+GROUP BY s.avg_clv, s.stddev_clv, s.min_clv, s.max_clv, s.total_customers;
 
 -- Q3: Repeat vs One-time customers
 SELECT 'Customer Purchase Frequency Analysis' as analysis;
@@ -76,10 +92,10 @@ SELECT 'Revenue Analysis by Country' as analysis;
 SELECT 
     c.country,
     COUNT(DISTINCT c.customer_id) as customer_count,
-    COALESCE(ROUND(SUM(i.total), 2), 0) as total_revenue,
+    COALESCE(ROUND(SUM(i.total)::numeric, 2), 0) as total_revenue,
     ROUND(COALESCE(SUM(i.total), 0) / COUNT(DISTINCT c.customer_id), 2) as revenue_per_customer,
     COUNT(i.invoice_id) as total_invoices,
-    ROUND(COALESCE(AVG(i.total), 0), 2) as avg_invoice_value
+    ROUND(COALESCE(AVG(i.total), 0)::numeric, 2) as avg_invoice_value
 FROM customer c
 LEFT JOIN invoice i ON c.customer_id = i.customer_id
 GROUP BY c.country
@@ -111,7 +127,7 @@ SELECT
     CASE 
         WHEN last_purchase_date IS NULL THEN 'Never purchased'
         ELSE CONCAT(
-            EXTRACT(days FROM (CURRENT_DATE - last_purchase_date::date)), 
+            (CURRENT_DATE - last_purchase_date::date), 
             ' days ago'
         )
     END as days_since_last_purchase
@@ -151,9 +167,9 @@ customer_segments AS (
 SELECT 
     segment,
     COUNT(*) as customer_count,
-    ROUND(AVG(total_spent), 2) as avg_total_spent,
-    ROUND(AVG(purchase_frequency), 1) as avg_purchase_frequency,
-    ROUND(AVG(avg_order_value), 2) as avg_order_value,
+    ROUND(AVG(total_spent)::numeric, 2) as avg_total_spent,
+    ROUND(AVG(purchase_frequency)::numeric, 1) as avg_purchase_frequency,
+    ROUND(AVG(avg_order_value)::numeric, 2) as avg_order_value,
     ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) as percentage
 FROM customer_segments
 GROUP BY segment

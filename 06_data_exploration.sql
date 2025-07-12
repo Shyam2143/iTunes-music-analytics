@@ -1,5 +1,5 @@
 /*************************************************************************************************
--- Apple iTunes Music Analysis - Data Exploration
+-- Apple iTunes Music Analysis - Data Exploration (FIXED)
 --
 -- Author: Shyam
 -- Date: 2025-07-10
@@ -34,7 +34,7 @@ WITH genre_stats AS (
     SELECT 
         g.name as genre,
         COUNT(t.track_id) as track_count,
-        ROUND(AVG(t.unit_price), 2) as avg_price,
+        ROUND(AVG(t.unit_price)::numeric, 2) as avg_price,
         (SELECT COUNT(*) FROM track) as total_tracks
     FROM genre g
     LEFT JOIN track t ON g.genre_id = t.genre_id
@@ -54,8 +54,8 @@ SELECT 'Media Type Analysis' as analysis;
 SELECT 
     mt.name as media_type,
     COUNT(t.track_id) as track_count,
-    ROUND(AVG(t.unit_price), 2) as avg_price,
-    ROUND(AVG(t.milliseconds/1000.0/60.0), 2) as avg_duration_minutes
+    ROUND(AVG(t.unit_price)::numeric, 2) as avg_price,
+    ROUND(AVG(t.milliseconds/1000.0/60.0)::numeric, 2) as avg_duration_minutes
 FROM media_type mt
 LEFT JOIN track t ON mt.media_type_id = t.media_type_id
 GROUP BY mt.media_type_id, mt.name
@@ -96,7 +96,7 @@ SELECT
         WHEN invoice_count > 10 THEN '10+ purchases'
     END as purchase_frequency,
     COUNT(*) as customer_count,
-    ROUND(AVG(total_spent), 2) as avg_total_spent
+    ROUND(AVG(total_spent)::numeric, 2) as avg_total_spent
 FROM customer_behavior
 GROUP BY 
     CASE 
@@ -114,8 +114,8 @@ SELECT 'Monthly Sales Trends' as analysis;
 SELECT 
     TO_CHAR(invoice_date, 'YYYY-MM') as month,
     COUNT(*) as invoice_count,
-    ROUND(SUM(total), 2) as total_revenue,
-    ROUND(AVG(total), 2) as avg_invoice_value
+    ROUND(SUM(total)::numeric, 2) as total_revenue,
+    ROUND(AVG(total)::numeric, 2) as avg_invoice_value
 FROM invoice
 GROUP BY TO_CHAR(invoice_date, 'YYYY-MM')
 ORDER BY month;
@@ -127,7 +127,7 @@ SELECT
     CONCAT(e.first_name, ' ', e.last_name) as employee_name,
     e.title,
     COUNT(DISTINCT c.customer_id) as customers_managed,
-    ROUND(COALESCE(SUM(i.total), 0), 2) as total_revenue_generated
+    ROUND(COALESCE(SUM(i.total), 0)::numeric, 2) as total_revenue_generated
 FROM employee e
 LEFT JOIN customer c ON e.employee_id = c.support_rep_id
 LEFT JOIN invoice i ON c.customer_id = i.customer_id

@@ -1,5 +1,5 @@
 /*************************************************************************************************
--- Apple iTunes Music Analysis - Executive Summary & KPIs
+-- Apple iTunes Music Analysis - Executive Summary & KPIs (FINAL FIX)
 --
 -- Author: Shyam
 -- Date: 2025-07-10
@@ -9,76 +9,68 @@
 *************************************************************************************************/
 
 -- Executive Summary - Key Business Metrics
-SELECT 'EXECUTIVE SUMMARY - KEY METRICS' as report_section;
-
 WITH business_metrics AS (
     SELECT 
-        COUNT(DISTINCT c.customer_id) as total_customers,
-        COUNT(DISTINCT i.invoice_id) as total_transactions,
-        ROUND(SUM(i.total), 2) as total_revenue,
-        ROUND(AVG(i.total), 2) as avg_transaction_value,
-        COUNT(DISTINCT ar.artist_id) as total_artists,
-        COUNT(DISTINCT t.track_id) as total_tracks,
-        COUNT(DISTINCT il.track_id) as tracks_sold,
-        MAX(i.invoice_date) as latest_transaction,
-        MIN(i.invoice_date) as earliest_transaction
-    FROM customer c
-    LEFT JOIN invoice i ON c.customer_id = i.customer_id
-    CROSS JOIN artist ar
-    CROSS JOIN track t
-    LEFT JOIN invoice_line il ON t.track_id = il.track_id
+        (SELECT ROUND(SUM(total)::numeric, 2) FROM invoice) as total_revenue,
+        (SELECT COUNT(*) FROM customer) as total_customers,
+        (SELECT COUNT(*) FROM invoice) as total_transactions,
+        (SELECT ROUND(AVG(total)::numeric, 2) FROM invoice) as avg_transaction_value,
+        (SELECT COUNT(*) FROM track) as total_tracks,
+        (SELECT COUNT(*) FROM artist) as total_artists
 )
-SELECT 
-    'Total Revenue' as metric, 
-    CONCAT('$', total_revenue) as value,
-    'Primary business outcome' as description
+SELECT 'EXECUTIVE SUMMARY - KEY METRICS' as report_section, 
+       'Total Revenue' as metric, 
+       CONCAT('$', total_revenue) as value,
+       'Primary business outcome' as description
 FROM business_metrics
 UNION ALL
-SELECT 
-    'Total Customers', 
-    total_customers::text,
-    'Active customer base'
+SELECT 'EXECUTIVE SUMMARY - KEY METRICS',
+       'Total Customers', 
+       total_customers::text,
+       'Active customer base'
 FROM business_metrics
 UNION ALL
-SELECT 
-    'Total Transactions', 
-    total_transactions::text,
-    'Purchase frequency indicator'
+SELECT 'EXECUTIVE SUMMARY - KEY METRICS',
+       'Total Transactions', 
+       total_transactions::text,
+       'Purchase frequency indicator'
 FROM business_metrics
 UNION ALL
-SELECT 
-    'Average Transaction Value', 
-    CONCAT('$', avg_transaction_value),
-    'Customer spending behavior'
+SELECT 'EXECUTIVE SUMMARY - KEY METRICS',
+       'Average Transaction Value', 
+       CONCAT('$', avg_transaction_value),
+       'Customer spending behavior'
 FROM business_metrics
 UNION ALL
-SELECT 
-    'Music Catalog Size', 
-    total_tracks::text,
-    'Available inventory'
+SELECT 'EXECUTIVE SUMMARY - KEY METRICS',
+       'Music Catalog Size', 
+       total_tracks::text,
+       'Available inventory'
 FROM business_metrics
 UNION ALL
-SELECT 
-    'Catalog Utilization', 
-    CONCAT(ROUND(tracks_sold * 100.0 / total_tracks, 1), '%'),
-    'Percentage of tracks sold'
+SELECT 'EXECUTIVE SUMMARY - KEY METRICS',
+       'Total Artists', 
+       total_artists::text,
+       'Artist diversity'
 FROM business_metrics;
 
--- Monthly Performance Trends (Last 12 Months)
-SELECT 'MONTHLY PERFORMANCE TRENDS (Last 12 Months)' as report_section;
-
-WITH monthly_kpis AS (
+-- Monthly Performance Trends (Last 12 Months of available data)
+WITH date_boundary AS (
+    SELECT MAX(invoice_date) as max_date FROM invoice
+),
+monthly_kpis AS (
     SELECT 
-        TO_CHAR(invoice_date, 'YYYY-MM') as month,
-        COUNT(DISTINCT customer_id) as active_customers,
+        TO_CHAR(i.invoice_date, 'YYYY-MM') as month,
+        COUNT(DISTINCT i.customer_id) as active_customers,
         COUNT(*) as transactions,
-        ROUND(SUM(total), 2) as revenue,
-        ROUND(AVG(total), 2) as avg_transaction_value
-    FROM invoice
-    WHERE invoice_date >= CURRENT_DATE - INTERVAL '12 months'
-    GROUP BY TO_CHAR(invoice_date, 'YYYY-MM')
+        ROUND(SUM(i.total)::numeric, 2) as revenue,
+        ROUND(AVG(i.total)::numeric, 2) as avg_transaction_value
+    FROM invoice i, date_boundary d
+    WHERE i.invoice_date >= d.max_date - INTERVAL '12 months'
+    GROUP BY TO_CHAR(i.invoice_date, 'YYYY-MM')
 )
 SELECT 
+    'MONTHLY PERFORMANCE TRENDS' as report_section,
     month,
     active_customers,
     transactions,
@@ -92,158 +84,197 @@ SELECT
 FROM monthly_kpis
 ORDER BY month;
 
--- Top Performance Categories
-SELECT 'TOP PERFORMERS BY CATEGORY' as report_section;
-
--- Top 5 Revenue Countries
-SELECT 'Top Revenue Countries' as category, country as name, 
-       CONCAT('$', ROUND(SUM(total), 2)) as value
+-- Top 5 Countries by Revenue
+SELECT 
+    'TOP 5 COUNTRIES BY REVENUE' as report_section,
+    c.country,
+    COUNT(DISTINCT c.customer_id) as customer_count,
+    ROUND(SUM(i.total)::numeric, 2) as total_revenue
 FROM customer c
 JOIN invoice i ON c.customer_id = i.customer_id
-GROUP BY country
-ORDER BY SUM(total) DESC
-LIMIT 5
+GROUP BY c.country
+ORDER BY total_revenue DESC
+LIMIT 5;
 
-UNION ALL
-
--- Top 5 Revenue Artists
-SELECT 'Top Revenue Artists', ar.name,
-       CONCAT('$', ROUND(SUM(il.unit_price * il.quantity), 2))
+-- Top 5 Artists by Revenue
+SELECT 
+    'TOP 5 ARTISTS BY REVENUE' as report_section,
+    ar.name as artist_name,
+    ROUND(SUM(il.unit_price * il.quantity)::numeric, 2) as total_revenue,
+    COUNT(DISTINCT il.invoice_id) as total_sales
 FROM artist ar
 JOIN album al ON ar.artist_id = al.artist_id
 JOIN track t ON al.album_id = t.album_id
 JOIN invoice_line il ON t.track_id = il.track_id
 GROUP BY ar.artist_id, ar.name
-ORDER BY SUM(il.unit_price * il.quantity) DESC
-LIMIT 5
+ORDER BY total_revenue DESC
+LIMIT 5;
 
-UNION ALL
-
--- Top 5 Revenue Genres
-SELECT 'Top Revenue Genres', g.name,
-       CONCAT('$', ROUND(SUM(il.unit_price * il.quantity), 2))
+-- Top 5 Genres by Revenue
+SELECT 
+    'TOP 5 GENRES BY REVENUE' as report_section,
+    g.name as genre_name,
+    ROUND(SUM(il.unit_price * il.quantity)::numeric, 2) as total_revenue,
+    COUNT(il.track_id) as tracks_sold
 FROM genre g
 JOIN track t ON g.genre_id = t.genre_id
 JOIN invoice_line il ON t.track_id = il.track_id
 GROUP BY g.genre_id, g.name
-ORDER BY SUM(il.unit_price * il.quantity) DESC
+ORDER BY total_revenue DESC
 LIMIT 5;
 
--- Customer Segment Analysis
-SELECT 'CUSTOMER SEGMENTATION ANALYSIS' as report_section;
-
-WITH customer_segments AS (
+-- Customer Segmentation Analysis (Simplified)
+WITH customer_spending AS (
     SELECT 
         c.customer_id,
-        COUNT(i.invoice_id) as purchase_frequency,
-        COALESCE(SUM(i.total), 0) as total_spent,
-        MAX(i.invoice_date) as last_purchase,
-        CASE 
-            WHEN COALESCE(SUM(i.total), 0) >= 40 AND COUNT(i.invoice_id) >= 7 THEN 'VIP'
-            WHEN COALESCE(SUM(i.total), 0) >= 20 AND COUNT(i.invoice_id) >= 4 THEN 'Loyal'
-            WHEN COALESCE(SUM(i.total), 0) >= 10 OR COUNT(i.invoice_id) >= 2 THEN 'Regular'
-            WHEN COALESCE(SUM(i.total), 0) > 0 THEN 'New'
-            ELSE 'Inactive'
-        END as segment,
-        CASE 
-            WHEN MAX(i.invoice_date) IS NULL THEN 'Never Purchased'
-            WHEN MAX(i.invoice_date) < CURRENT_DATE - INTERVAL '6 months' THEN 'At Risk'
-            WHEN MAX(i.invoice_date) < CURRENT_DATE - INTERVAL '3 months' THEN 'Declining'
-            ELSE 'Active'
-        END as activity_status
+        COUNT(i.invoice_id) as purchase_count,
+        COALESCE(SUM(i.total), 0) as total_spent
     FROM customer c
     LEFT JOIN invoice i ON c.customer_id = i.customer_id
     GROUP BY c.customer_id
+),
+customer_segments AS (
+    SELECT 
+        CASE 
+            WHEN total_spent >= 40 AND purchase_count >= 7 THEN 'VIP'
+            WHEN total_spent >= 20 AND purchase_count >= 4 THEN 'Loyal'
+            WHEN total_spent >= 10 OR purchase_count >= 2 THEN 'Regular'
+            WHEN total_spent > 0 THEN 'New'
+            ELSE 'Inactive'
+        END as segment,
+        total_spent,
+        purchase_count
+    FROM customer_spending
 )
 SELECT 
+    'CUSTOMER SEGMENTATION ANALYSIS' as report_section,
     segment,
-    activity_status,
     COUNT(*) as customer_count,
-    ROUND(AVG(total_spent), 2) as avg_spent,
-    ROUND(SUM(total_spent), 2) as segment_revenue,
+    ROUND(AVG(total_spent)::numeric, 2) as avg_spent,
+    ROUND(SUM(total_spent)::numeric, 2) as segment_revenue,
     ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 1) as customer_percentage,
     ROUND(SUM(total_spent) * 100.0 / SUM(SUM(total_spent)) OVER(), 1) as revenue_percentage
 FROM customer_segments
-GROUP BY segment, activity_status
+GROUP BY segment
 ORDER BY segment_revenue DESC;
 
--- Business Health Indicators
-SELECT 'BUSINESS HEALTH INDICATORS' as report_section;
+-- Sales Performance by Employee
+SELECT 
+    'SALES PERFORMANCE BY EMPLOYEE' as report_section,
+    CONCAT(e.first_name, ' ', e.last_name) as employee_name,
+    e.title,
+    COUNT(DISTINCT c.customer_id) as customers_managed,
+    COUNT(i.invoice_id) as total_sales,
+    ROUND(COALESCE(SUM(i.total), 0)::numeric, 2) as total_revenue
+FROM employee e
+LEFT JOIN customer c ON e.employee_id = c.support_rep_id
+LEFT JOIN invoice i ON c.customer_id = i.customer_id
+GROUP BY e.employee_id, e.first_name, e.last_name, e.title
+ORDER BY total_revenue DESC;
 
-WITH health_metrics AS (
+-- Business Health Indicators
+WITH recent_dates AS (
     SELECT 
-        -- Customer metrics
-        COUNT(DISTINCT CASE WHEN i.invoice_date >= CURRENT_DATE - INTERVAL '1 month' THEN c.customer_id END) as active_customers_1m,
-        COUNT(DISTINCT CASE WHEN i.invoice_date >= CURRENT_DATE - INTERVAL '3 months' THEN c.customer_id END) as active_customers_3m,
-        COUNT(DISTINCT c.customer_id) as total_customers,
-        
-        -- Revenue metrics
-        SUM(CASE WHEN i.invoice_date >= CURRENT_DATE - INTERVAL '1 month' THEN i.total ELSE 0 END) as revenue_1m,
-        SUM(CASE WHEN i.invoice_date >= CURRENT_DATE - INTERVAL '3 months' THEN i.total ELSE 0 END) as revenue_3m,
-        SUM(i.total) as total_revenue,
-        
-        -- Product metrics
+        MAX(invoice_date) as latest_date
+    FROM invoice
+),
+customer_activity AS (
+    SELECT 
+        COUNT(DISTINCT CASE 
+            WHEN i.invoice_date >= (SELECT latest_date FROM recent_dates) - INTERVAL '1 month' 
+            THEN i.customer_id 
+        END) as active_1m,
+        COUNT(DISTINCT CASE 
+            WHEN i.invoice_date >= (SELECT latest_date FROM recent_dates) - INTERVAL '3 months' 
+            THEN i.customer_id 
+        END) as active_3m
+    FROM invoice i
+),
+totals AS (
+    SELECT 
+        COUNT(*) as total_customers
+    FROM customer
+),
+catalog_metrics AS (
+    SELECT 
         COUNT(DISTINCT il.track_id) as tracks_sold,
         COUNT(DISTINCT t.track_id) as total_tracks
-    FROM customer c
-    LEFT JOIN invoice i ON c.customer_id = i.customer_id
-    CROSS JOIN track t
+    FROM track t
     LEFT JOIN invoice_line il ON t.track_id = il.track_id
 )
 SELECT 
-    'Customer Engagement Rate (1M)' as indicator,
-    CONCAT(ROUND(active_customers_1m * 100.0 / NULLIF(total_customers, 0), 1), '%') as value,
-    'Customers active in last month vs total' as definition
-FROM health_metrics
+    'BUSINESS HEALTH INDICATORS' as report_section,
+    'Customer Engagement (1M)' as indicator,
+    CONCAT(ROUND(ca.active_1m * 100.0 / NULLIF(t.total_customers, 0), 1), '%') as value,
+    'Customers active in last month' as description
+FROM customer_activity ca, totals t
 UNION ALL
 SELECT 
-    'Customer Engagement Rate (3M)',
-    CONCAT(ROUND(active_customers_3m * 100.0 / NULLIF(total_customers, 0), 1), '%'),
-    'Customers active in last 3 months vs total'
-FROM health_metrics
+    'BUSINESS HEALTH INDICATORS',
+    'Customer Engagement (3M)',
+    CONCAT(ROUND(ca.active_3m * 100.0 / NULLIF(t.total_customers, 0), 1), '%'),
+    'Customers active in last 3 months'
+FROM customer_activity ca, totals t
 UNION ALL
 SELECT 
-    'Catalog Utilization Rate',
-    CONCAT(ROUND(tracks_sold * 100.0 / NULLIF(total_tracks, 0), 1), '%'),
-    'Percentage of catalog that has been sold'
-FROM health_metrics
-UNION ALL
-SELECT 
-    'Revenue Concentration (1M)',
-    CONCAT(ROUND(revenue_1m * 100.0 / NULLIF(total_revenue, 0), 1), '%'),
-    'Percentage of total revenue from last month'
-FROM health_metrics;
+    'BUSINESS HEALTH INDICATORS',
+    'Catalog Utilization',
+    CONCAT(ROUND(cm.tracks_sold * 100.0 / NULLIF(cm.total_tracks, 0), 1), '%'),
+    'Percentage of tracks ever sold'
+FROM catalog_metrics cm;
 
--- Recommendations Summary
-SELECT 'KEY RECOMMENDATIONS' as report_section;
-
+-- Key Recommendations
 SELECT 
+    'KEY RECOMMENDATIONS' as report_section,
     1 as priority,
     'Customer Retention' as focus_area,
     'Implement targeted campaigns for at-risk customers' as recommendation,
     'High impact on revenue sustainability' as rationale
 UNION ALL
 SELECT 
+    'KEY RECOMMENDATIONS',
     2,
     'Geographic Expansion',
     'Expand marketing in high-value, low-penetration countries',
     'Untapped revenue potential in existing markets'
 UNION ALL
 SELECT 
+    'KEY RECOMMENDATIONS',
     3,
     'Catalog Optimization',
     'Promote or discount unpurchased tracks',
     'Improve inventory turnover and ROI'
 UNION ALL
 SELECT 
+    'KEY RECOMMENDATIONS',
     4,
     'Customer Segmentation',
     'Develop VIP customer loyalty programs',
     'Maximize value from top-spending customers'
 UNION ALL
 SELECT 
+    'KEY RECOMMENDATIONS',
     5,
     'Product Mix',
     'Focus on high-performing genres and artists',
     'Optimize content acquisition strategy'
 ORDER BY priority;
+
+-- Data Summary
+WITH data_summary AS (
+    SELECT 
+        MIN(invoice_date) as earliest_date,
+        MAX(invoice_date) as latest_date,
+        COUNT(DISTINCT TO_CHAR(invoice_date, 'YYYY-MM')) as months_of_data
+    FROM invoice
+)
+SELECT 
+    'DATA SUMMARY' as report_section,
+    'Data Period' as metric,
+    CONCAT(
+        TO_CHAR(earliest_date, 'YYYY-MM-DD'), 
+        ' to ', 
+        TO_CHAR(latest_date, 'YYYY-MM-DD')
+    ) as value,
+    CONCAT(months_of_data, ' months of transaction data') as description
+FROM data_summary;

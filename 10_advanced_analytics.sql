@@ -1,5 +1,5 @@
 /*************************************************************************************************
--- Apple iTunes Music Analysis - Advanced Analytics
+-- Apple iTunes Music Analysis - Advanced Analytics (FIXED)
 --
 -- Author: Shyam
 -- Date: 2025-07-10
@@ -29,7 +29,7 @@ SELECT
     purchase_count,
     ROW_NUMBER() OVER (ORDER BY total_spent DESC) as revenue_rank,
     DENSE_RANK() OVER (ORDER BY total_spent DESC) as revenue_dense_rank,
-    ROUND(PERCENT_RANK() OVER (ORDER BY total_spent), 4) as revenue_percentile,
+    ROUND(PERCENT_RANK() OVER (ORDER BY total_spent)::numeric, 4) as revenue_percentile,
     CASE 
         WHEN PERCENT_RANK() OVER (ORDER BY total_spent) >= 0.9 THEN 'Top 10%'
         WHEN PERCENT_RANK() OVER (ORDER BY total_spent) >= 0.75 THEN 'Top 25%'
@@ -54,20 +54,20 @@ WITH monthly_revenue AS (
 )
 SELECT 
     month,
-    ROUND(monthly_revenue, 2) as monthly_revenue,
+    ROUND(monthly_revenue::numeric, 2) as monthly_revenue,
     monthly_invoices,
-    ROUND(SUM(monthly_revenue) OVER (ORDER BY month), 2) as running_total,
+    ROUND(SUM(monthly_revenue) OVER (ORDER BY month)::numeric, 2) as running_total,
     ROUND(
         AVG(monthly_revenue) OVER (
             ORDER BY month 
             ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
-        ), 2
+        )::numeric, 2
     ) as three_month_avg,
     ROUND(
         AVG(monthly_revenue) OVER (
             ORDER BY month 
             ROWS BETWEEN 5 PRECEDING AND CURRENT ROW
-        ), 2
+        )::numeric, 2
     ) as six_month_avg,
     LAG(monthly_revenue, 1) OVER (ORDER BY month) as prev_month,
     ROUND(
@@ -87,7 +87,7 @@ WITH artist_genre_performance AS (
         g.name as genre,
         COUNT(DISTINCT t.track_id) as track_count,
         COUNT(il.track_id) as sales_count,
-        ROUND(SUM(il.unit_price * il.quantity), 2) as revenue
+        ROUND(SUM(il.unit_price * il.quantity)::numeric, 2) as revenue
     FROM artist ar
     JOIN album al ON ar.artist_id = al.artist_id
     JOIN track t ON al.album_id = t.album_id
@@ -95,19 +95,32 @@ WITH artist_genre_performance AS (
     LEFT JOIN invoice_line il ON t.track_id = il.track_id
     GROUP BY ar.artist_id, ar.name, g.genre_id, g.name
     HAVING COUNT(DISTINCT t.track_id) >= 3  -- Artists with at least 3 tracks in genre
+),
+ranked_artists AS (
+    SELECT 
+        genre,
+        artist_name,
+        track_count,
+        sales_count,
+        COALESCE(revenue, 0) as revenue,
+        ROW_NUMBER() OVER (PARTITION BY genre ORDER BY revenue DESC NULLS LAST) as genre_rank,
+        SUM(revenue) OVER (PARTITION BY genre) as genre_total_revenue
+    FROM artist_genre_performance
 )
 SELECT 
     genre,
     artist_name,
     track_count,
     sales_count,
-    COALESCE(revenue, 0) as revenue,
-    ROW_NUMBER() OVER (PARTITION BY genre ORDER BY revenue DESC NULLS LAST) as genre_rank,
+    revenue,
+    genre_rank,
     ROUND(
-        revenue / SUM(revenue) OVER (PARTITION BY genre) * 100, 2
+        CASE WHEN genre_total_revenue > 0 
+             THEN revenue / genre_total_revenue * 100 
+             ELSE 0 END, 2
     ) as genre_revenue_share
-FROM artist_genre_performance
-WHERE ROW_NUMBER() OVER (PARTITION BY genre ORDER BY revenue DESC NULLS LAST) <= 5
+FROM ranked_artists
+WHERE genre_rank <= 5
 ORDER BY genre, genre_rank;
 
 -- Q4: Customer cohort analysis by first purchase month
@@ -134,22 +147,34 @@ customer_monthly_activity AS (
         ) / (30 * 24 * 3600) as months_since_first_purchase
     FROM customer_first_purchase cfp
     JOIN invoice i ON cfp.customer_id = i.customer_id
+),
+cohort_data AS (
+    SELECT 
+        cohort_month,
+        months_since_first_purchase,
+        COUNT(DISTINCT customer_id) as active_customers
+    FROM customer_monthly_activity
+    WHERE cohort_month >= '2012-01'  -- Focus on recent cohorts
+    GROUP BY cohort_month, months_since_first_purchase
+),
+cohort_sizes AS (
+    SELECT 
+        cohort_month,
+        COUNT(DISTINCT customer_id) as cohort_size
+    FROM customer_first_purchase
+    WHERE cohort_month >= '2012-01'
+    GROUP BY cohort_month
 )
 SELECT 
-    cohort_month,
-    months_since_first_purchase,
-    COUNT(DISTINCT customer_id) as active_customers,
+    cd.cohort_month,
+    cd.months_since_first_purchase,
+    cd.active_customers,
     ROUND(
-        COUNT(DISTINCT customer_id) * 100.0 / 
-        FIRST_VALUE(COUNT(DISTINCT customer_id)) OVER (
-            PARTITION BY cohort_month 
-            ORDER BY months_since_first_purchase
-        ), 2
+        cd.active_customers * 100.0 / cs.cohort_size, 2
     ) as retention_rate
-FROM customer_monthly_activity
-WHERE cohort_month >= '2012-01'  -- Focus on recent cohorts
-GROUP BY cohort_month, months_since_first_purchase
-ORDER BY cohort_month, months_since_first_purchase;
+FROM cohort_data cd
+JOIN cohort_sizes cs ON cd.cohort_month = cs.cohort_month
+ORDER BY cd.cohort_month, cd.months_since_first_purchase;
 
 -- Q5: Top performing tracks with trend analysis
 SELECT 'Track Performance Trends' as analysis;
@@ -192,10 +217,10 @@ SELECT
     artist_name,
     COUNT(*) as months_active,
     SUM(monthly_sales) as total_sales,
-    ROUND(SUM(monthly_revenue), 2) as total_revenue,
-    ROUND(AVG(monthly_sales), 2) as avg_monthly_sales,
+    ROUND(SUM(monthly_revenue)::numeric, 2) as total_revenue,
+    ROUND(AVG(monthly_sales)::numeric, 2) as avg_monthly_sales,
     MAX(monthly_sales) as peak_monthly_sales,
-    ROUND(STDDEV(monthly_sales), 2) as sales_volatility
+    ROUND(STDDEV(monthly_sales)::numeric, 2) as sales_volatility
 FROM track_trends
 GROUP BY track_id, track_name, artist_name
 HAVING SUM(monthly_sales) >= 5  -- Tracks with at least 5 total sales
@@ -228,10 +253,10 @@ country_rankings AS (
 SELECT 
     country,
     customer_count,
-    ROUND(total_revenue, 2) as total_revenue,
-    ROUND(avg_order_value, 2) as avg_order_value,
+    ROUND(total_revenue::numeric, 2) as total_revenue,
+    ROUND(avg_order_value::numeric, 2) as avg_order_value,
     total_orders,
-    ROUND(revenue_per_customer, 2) as revenue_per_customer,
+    ROUND(revenue_per_customer::numeric, 2) as revenue_per_customer,
     revenue_rank,
     customer_rank,
     last_order_date,

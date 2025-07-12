@@ -1,5 +1,5 @@
 /*************************************************************************************************
--- Apple iTunes Music Analysis - Basic Statistics
+-- Apple iTunes Music Analysis - Basic Statistics (FIXED)
 --
 -- Author: Shyam
 -- Date: 2025-07-10
@@ -31,9 +31,9 @@ WITH customer_stats AS (
     SELECT 
         COUNT(DISTINCT c.country) as countries_served,
         COUNT(DISTINCT c.city) as cities_served,
-        ROUND(AVG(i.total), 2) as avg_invoice_value,
-        ROUND(MAX(i.total), 2) as max_invoice_value,
-        ROUND(MIN(i.total), 2) as min_invoice_value
+        ROUND(AVG(i.total)::numeric, 2) as avg_invoice_value,
+        ROUND(MAX(i.total)::numeric, 2) as max_invoice_value,
+        ROUND(MIN(i.total)::numeric, 2) as min_invoice_value
     FROM customer c
     LEFT JOIN invoice i ON c.customer_id = i.customer_id
     WHERE i.total IS NOT NULL
@@ -45,10 +45,10 @@ SELECT 'Music Catalog Statistics' as section;
 
 WITH music_stats AS (
     SELECT 
-        ROUND(AVG(unit_price), 2) as avg_track_price,
-        ROUND(MAX(unit_price), 2) as max_track_price,
-        ROUND(MIN(unit_price), 2) as min_track_price,
-        ROUND(AVG(milliseconds/1000.0/60.0), 2) as avg_track_duration_minutes,
+        ROUND(AVG(unit_price)::numeric, 2) as avg_track_price,
+        ROUND(MAX(unit_price)::numeric, 2) as max_track_price,
+        ROUND(MIN(unit_price)::numeric, 2) as min_track_price,
+        ROUND(AVG(milliseconds/1000.0/60.0)::numeric, 2) as avg_track_duration_minutes,
         COUNT(CASE WHEN composer IS NOT NULL AND composer != '' THEN 1 END) as tracks_with_composer,
         COUNT(CASE WHEN composer IS NULL OR composer = '' THEN 1 END) as tracks_without_composer
     FROM track
@@ -62,8 +62,8 @@ WITH sales_stats AS (
     SELECT 
         COUNT(*) as total_line_items,
         SUM(quantity) as total_units_sold,
-        ROUND(AVG(unit_price), 2) as avg_selling_price,
-        ROUND(SUM(unit_price * quantity), 2) as total_line_revenue
+        ROUND(AVG(unit_price)::numeric, 2) as avg_selling_price,
+        ROUND(SUM(unit_price * quantity)::numeric, 2) as total_line_revenue
     FROM invoice_line
 )
 SELECT * FROM sales_stats;
